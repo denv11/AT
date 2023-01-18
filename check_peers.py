@@ -1,11 +1,14 @@
+#############################################################
 # Скрипт для проверки пира на основе данных учетной записи
-# Необходимо установить через pip модуль paramiko
+# Необходимо установить через pip модуль paramiko, python-ldap
+##################################################################
 
 # -*- coding: utf-8 -*-
 
 import ldap
 from datetime import datetime, timedelta, tzinfo
 import paramiko
+import configparser
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -28,6 +31,8 @@ def filetime_to_dt(ft):
     dt = dt.date()
     return dt
 
+config = configparser.ConfigParser()
+config.read('.env')
 def sendmail(text):
     msg = MIMEMultipart()
     msg['From'] = 'it@planetavto.ru'
@@ -38,16 +43,18 @@ def sendmail(text):
     mailserver = smtplib.SMTP("mail.planetavto.ru", 587)
     mailserver.starttls()
     mailserver.ehlo()
-    mailserver.login('it', 'Kad866044')
+    mailserver.login(config['Mail']['user'], config['Mail']['password'])
     mailserver.sendmail(msg['From'], msg['To'], msg.as_string())
     mailserver.quit()
 
 # Получить почту и e-mail
 def get_phone_and_logon_date_by_dn(user):
+    usr = config['LDAP']['user']
+    passwd = config['LDAP']['password']
     ad = ldap.initialize("ldap://10.10.10.3")
     ad.protocol_version = ldap.VERSION3
     ad.set_option(ldap.OPT_REFERRALS, 0)
-    ad.simple_bind_s("ldapsearch@pa.local", "6EqYqY2Z")
+    ad.simple_bind_s(usr, passwd)
     phone = ''
     result = ad.search_s(user, ldap.SCOPE_BASE,
             '(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(telephoneNumber=*))')
@@ -63,9 +70,11 @@ def get_phone_and_logon_date_by_dn(user):
 def salers_search():
     ad_filter = '(&(objectClass=GROUP)(cn=Менеджеры))'
     ad = ldap.initialize("ldap://10.10.10.3")
+    usr = config['LDAP']['user']
+    passwd = config['LDAP']['password']
     ad.protocol_version = ldap.VERSION3
     ad.set_option(ldap.OPT_REFERRALS, 0)
-    ad.simple_bind_s("ldapsearch@pa.local", "6EqYqY2Z")
+    ad.simple_bind_s(usr, passwd)
     attrlist = ["member"]
     basedn = "OU=pa.local,DC=pa,DC=local"
     result = ad.search_s(basedn, ldap.SCOPE_SUBTREE, ad_filter, attrlist)
@@ -84,7 +93,7 @@ userlist = salers_search()
 def check_in_asterisk (userlist):
     client = paramiko.client.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect('pbx.pa.local', username='root', password='Cd12345678#')
+    client.connect('pbx.pa.local', username=config['PBX']['user'], password=config['PBX']['password'])
     number_not_present = ["222", "223"]
     for record in userlist:
 #        print(record)
